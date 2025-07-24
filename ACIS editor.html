@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ACIS Image Editor</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #181818;
+      color: white;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    canvas {
+      border: 2px solid #ffffff55;
+      image-rendering: pixelated;
+      margin: 10px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input[type="color"], input[type="file"], input[type="number"], button, select {
+      padding: 5px;
+      border: none;
+      border-radius: 5px;
+      background: #333;
+      color: white;
+    }
+    button:hover {
+      background: #444;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 ACIS Image Editor</h1>
+
+  <div class="controls">
+    <label>🎨 Couleur : <input type="color" id="colorPicker" value="#ff0000" /></label>
+    <label>🖌️ Outil :
+      <select id="tool">
+        <option value="brush">Pinceau</option>
+        <option value="fill">Seau</option>
+        <option value="picker">Pipette</option>
+        <option value="eraser">Gomme</option>
+      </select>
+    </label>
+    <label>📏 Taille pinceau :
+      <select id="brushSize">
+        <option value="1">1x1</option>
+        <option value="2">2x2</option>
+        <option value="3">3x3</option>
+        <option value="4">4x4</option>
+      </select>
+    </label>
+    <label>🖼️ Taille canevas :
+      <input type="number" id="canvasSize" value="16" min="1" max="128" />
+      <button onclick="resizeCanvas()">Changer</button>
+    </label>
+    <button onclick="clearCanvas()">🧼 Effacer</button>
+    <button onclick="exportACIS()">💾 Exporter .acis</button>
+    <button onclick="exportPNG()">📤 Exporter PNG</button>
+    <input type="file" id="importFile" accept=".acis" />
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    let canvas = document.getElementById('canvas');
+    let ctx = canvas.getContext('2d');
+    const colorPicker = document.getElementById('colorPicker');
+    const brushSizeInput = document.getElementById('brushSize');
+    const toolSelect = document.getElementById('tool');
+    const canvasSizeInput = document.getElementById('canvasSize');
+    let size = parseInt(canvasSizeInput.value);
+    const pixelSize = 20;
+    canvas.width = canvas.height = size * pixelSize;
+
+    let pixels = Array(size).fill().map(() => Array(size).fill('#000000'));
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / pixelSize);
+      const y = Math.floor((e.clientY - rect.top) / pixelSize);
+      const brushSize = parseInt(brushSizeInput.value);
+      const tool = toolSelect.value;
+
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
+
+      if (tool === 'brush') paint(x, y, brushSize, colorPicker.value);
+      else if (tool === 'eraser') paint(x, y, brushSize, '#000000');
+      else if (tool === 'fill') fill(x, y, pixels[y][x], colorPicker.value);
+      else if (tool === 'picker') {
+        const pickedColor = pixels[y][x];
+        colorPicker.value = pickedColor;
+        toolSelect.value = 'brush';
+      }
+    });
+
+    function paint(x, y, size, color) {
+      for (let dy = 0; dy < size; dy++) {
+        for (let dx = 0; dx < size; dx++) {
+          const px = x + dx;
+          const py = y + dy;
+          if (px >= 0 && py >= 0 && px < pixels[0].length && py < pixels.length) {
+            pixels[py][px] = color;
+          }
+        }
+      }
+      draw();
+    }
+
+    function fill(x, y, targetColor, replacementColor) {
+      if (targetColor === replacementColor) return;
+      const stack = [[x, y]];
+      while (stack.length > 0) {
+        const [cx, cy] = stack.pop();
+        if (cx < 0 || cy < 0 || cx >= size || cy >= size) continue;
+        if (pixels[cy][cx] !== targetColor) continue;
+        pixels[cy][cx] = replacementColor;
+        stack.push([cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]);
+      }
+      draw();
+    }
+
+    function draw() {
+      canvas.width = canvas.height = size * pixelSize;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          ctx.fillStyle = pixels[y][x];
+          ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+        }
+      }
+    }
+
+    function clearCanvas() {
+      pixels = Array(size).fill().map(() => Array(size).fill('#000000'));
+      draw();
+    }
+
+    function resizeCanvas() {
+      size = parseInt(canvasSizeInput.value);
+      pixels = Array(size).fill().map(() => Array(size).fill('#000000'));
+      draw();
+    }
+
+    function compressRow(row) {
+      let result = '';
+      let count = 1;
+      for (let i = 6; i < row.length; i += 6) {
+        const current = row.substring(i - 6, i);
+        const next = row.substring(i, i + 6);
+        if (current === next) {
+          count++;
+        } else {
+          while (count > 9) {
+            result += `#9${current}`;
+            count -= 9;
+          }
+          if (count > 1) {
+            result += `#${count}${current}`;
+          } else {
+            result += current;
+          }
+          count = 1;
+        }
+      }
+
+      const lastSegment = row.substring(row.length - 6);
+      while (count > 9) {
+        result += `#9${lastSegment}`;
+        count -= 9;
+      }
+      if (count > 1) {
+        result += `#${count}${lastSegment}`;
+      } else {
+        result += lastSegment;
+      }
+
+      return result;
+    }
+
+    function exportACIS() {
+      let output = '!' + '\n';
+      for (let y = 0; y < size; y++) {
+        let row = '';
+        for (let x = 0; x < size; x++) {
+          row += pixels[y][x].substring(1).toUpperCase();
+        }
+        output += compressRow(row) + ',\n';
+      }
+      const blob = new Blob([output], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'image.acis';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function exportPNG() {
+      const pngCanvas = document.createElement('canvas');
+      pngCanvas.width = size;
+      pngCanvas.height = size;
+      const pngCtx = pngCanvas.getContext('2d');
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          pngCtx.fillStyle = pixels[y][x];
+          pngCtx.fillRect(x, y, 1, 1);
+        }
+      }
+      const a = document.createElement('a');
+      a.href = pngCanvas.toDataURL('image/png');
+      a.download = 'image.png';
+      a.click();
+    }
+
+    document.getElementById('importFile').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const lines = e.target.result.split(/\r?\n/);
+    if (lines[0] !== '!') {
+      alert("Fichier ACIS invalide");
+      return;
+    }
+
+    // ✅ Corrigé ici : ignorer les lignes vides après split(',')
+    const content = lines.slice(1).join('').split(',').filter(line => line.trim().length > 0);
+
+    size = content.length;
+    canvasSizeInput.value = size;
+    pixels = Array(size).fill().map(() => Array(size).fill('#000000'));
+
+    for (let y = 0; y < content.length && y < size; y++) {
+      let row = content[y];
+      row = row.replace(/#(\d)([0-9A-F]{6})/g, (_, count, hex) => hex.repeat(parseInt(count)));
+      for (let x = 0; x < row.length; x += 6) {
+        if (x / 6 < size) {
+          const hex = row.substring(x, x + 6);
+          if (hex.length === 6) {
+            pixels[y][x / 6] = '#' + hex;
+          }
+        }
+      }
+    }
+    draw();
+  };
+  reader.readAsText(file);
+});
+
+
+    draw();
+  </script>
+</body>
+</html>
