@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <title>ACIS Image Editor</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#181818" />
   <style>
     body {
       font-family: sans-serif;
@@ -69,7 +71,7 @@
   </div>
 
   <canvas id="canvas"></canvas>
-  <a href=png-to-acis.html>PNG TO ACIS</a>
+ <a href=png-to-acis.html>PNG TO ACIS</a>
 
   <script>
     let canvas = document.getElementById('canvas');
@@ -258,5 +260,13 @@
 
     draw();
   </script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(() => console.log('✅ Service Worker enregistré'))
+      .catch(err => console.error('❌ Erreur SW:', err));
+  }
+  </script>
+
 </body>
 </html>
