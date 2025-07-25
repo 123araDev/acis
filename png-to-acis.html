@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PNG → ACIS Converter</title>
+  <style>
+    body {
+      background: #181818;
+      color: white;
+      font-family: sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    input[type="file"], button {
+      background: #333;
+      color: white;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      margin: 10px;
+    }
+    canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>🖼️ Convertisseur PNG → ACIS</h1>
+  <input type="file" accept="image/png" id="pngInput" />
+  <button onclick="exportACIS()">💾 Exporter .acis</button>
+
+  <canvas id="hiddenCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById("hiddenCanvas");
+    const ctx = canvas.getContext("2d");
+    let pixels = [];
+    let size = 0;
+
+    document.getElementById("pngInput").addEventListener("change", function () {
+      const file = this.files[0];
+      if (!file) return;
+
+      const img = new Image();
+      img.onload = function () {
+        size = Math.min(img.width, img.height);
+        canvas.width = size;
+        canvas.height = size;
+        ctx.drawImage(img, 0, 0, size, size);
+        pixels = [];
+
+        for (let y = 0; y < size; y++) {
+          const row = [];
+          for (let x = 0; x < size; x++) {
+            const [r, g, b] = ctx.getImageData(x, y, 1, 1).data;
+            const hex = rgbToHex(r, g, b);
+            row.push(hex);
+          }
+          pixels.push(row);
+        }
+
+        alert("✅ Image chargée !");
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    function rgbToHex(r, g, b) {
+      return "#" + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+    }
+
+    function compressRow(row) {
+      let result = '';
+      let count = 1;
+      for (let i = 1; i < row.length; i++) {
+        const current = row[i - 1].substring(1); // remove "#"
+        const next = row[i].substring(1);
+        if (current === next) {
+          count++;
+        } else {
+          while (count > 9) {
+            result += `#9${current}`;
+            count -= 9;
+          }
+          if (count > 1) {
+            result += `#${count}${current}`;
+          } else {
+            result += current;
+          }
+          count = 1;
+        }
+      }
+
+      const last = row[row.length - 1].substring(1);
+      while (count > 9) {
+        result += `#9${last}`;
+        count -= 9;
+      }
+      if (count > 1) {
+        result += `#${count}${last}`;
+      } else {
+        result += last;
+      }
+
+      return result;
+    }
+
+    function exportACIS() {
+      if (pixels.length === 0) {
+        alert("Aucune image chargée.");
+        return;
+      }
+
+      let output = "!\n";
+      for (let y = 0; y < size; y++) {
+        output += compressRow(pixels[y]) + ",\n";
+      }
+
+      const blob = new Blob([output], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "converted.acis";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  </script>
+</body>
+</html>
